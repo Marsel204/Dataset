@@ -1,0 +1,1 @@
+cycle_id,timestamp,mode,v_w_pcu,q_meters,l_occupancy_pct,t_anfis_sec,n_served_actual,theoretical_capacity_pcu,fps,soc_temp_c,watchdog_status,llm_anomaly_flag,llm_severity,llm_critique

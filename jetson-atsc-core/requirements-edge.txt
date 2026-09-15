@@ -1,0 +1,24 @@
+# Jetson ATSC Production Edge Runtime Dependencies
+# NVIDIA Jetson Orin Nano (8GB, JetPack 6.x, Ubuntu 22.04 LTS)
+
+# Core Deep Learning & Tensor Acceleration
+# Note: For JetPack 6.x, install PyTorch with CUDA via NVIDIA wheel:
+# torch @ https://developer.download.nvidia.com/compute/redist/jp/v60/pytorch/torch-2.3.0a0+ebedce2.nv24.06-cp310-cp310-linux_aarch64.whl
+ultralytics>=8.3.0
+onnx>=1.15.0
+onnxruntime-gpu>=1.17.0
+
+# Computer Vision & Sensor Ingest
+opencv-python>=4.8.0
+numpy>=1.23.5,<2.0.0
+
+# Hardware Actuation & Communications
+pyserial>=3.5
+
+# Monitoring & Quality Auditor
+requests>=2.31.0
+psutil>=5.9.0
+jetson-stats>=4.2.0  # jtop telemetry for Jetson
+
+# Development & Export Helpers
+pytest>=8.0.0

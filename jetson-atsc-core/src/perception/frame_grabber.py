@@ -1,0 +1,229 @@
+"""
+GStreamer Hardware-Accelerated Video and Stream Ingest Module.
+
+Supports:
+- USB Action Cameras (/dev/video*) via v4l2src and Jetson nvvidconv
+- Local MP4 video files with hardware nvv4l2decoder and auto-looping
+- Low-latency RTSP and municipal HLS network streams
+- Thread-safe zero-latency buffer management preventing frame lag
+"""
+
+from __future__ import annotations
+
+import os
+import threading
+import time
+from typing import Optional, Tuple
+import cv2
+import numpy as np
+
+
+class FrameGrabber:
+    """
+    Asynchronous, non-blocking frame capture engine.
+
+    Launches a dedicated acquisition thread that pulls frames from GStreamer
+    or standard V4L2 pipelines, always serving the latest frame to prevent
+    the inference pipeline from accumulating stale buffered images.
+    """
+
+    def __init__(
+        self,
+        source: str | int,
+        width: int = 1920,
+        height: int = 1080,
+        fps: int = 30,
+        auto_loop: bool = True,
+        name: str = "Camera",
+    ) -> None:
+        """
+        Initialize the FrameGrabber.
+
+        Args:
+            source: Device path ('/dev/video0'), integer device index (0),
+                    local video file path ('test.mp4'), or stream URL ('rtsp://...').
+            width: Capture width in pixels (default 1920).
+            height: Capture height in pixels (default 1080).
+            fps: Frame rate (default 30).
+            auto_loop: Whether to loop local video files infinitely.
+            name: Identifier for logging.
+        """
+        self.source = source
+        self.width = width
+        self.height = height
+        self.fps = fps
+        self.auto_loop = auto_loop
+        self.name = name
+
+        self.is_file: bool = False
+        self.is_rtsp: bool = False
+        self._inspect_source_type()
+
+        # Thread synchronization
+        self._lock = threading.Lock()
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
+
+        self._latest_frame: Optional[np.ndarray] = None
+        self._latest_timestamp: float = 0.0
+        self._frame_count: int = 0
+        self._dropped_frames: int = 0
+        self._is_opened: bool = False
+
+        self.cap: Optional[cv2.VideoCapture] = None
+        self._init_capture()
+
+    def _inspect_source_type(self) -> None:
+        """Detects whether source is a file, RTSP stream, or V4L2 device."""
+        if isinstance(self.source, int):
+            self.is_file = False
+            self.is_rtsp = False
+        else:
+            s_str = str(self.source).strip()
+            if s_str.startswith("rtsp://") or s_str.startswith("http://") or s_str.startswith("https://"):
+                self.is_rtsp = True
+                self.is_file = False
+            elif os.path.isfile(s_str):
+                self.is_file = True
+                self.is_rtsp = False
+            else:
+                self.is_file = False
+                self.is_rtsp = False
+
+    def _build_gstreamer_pipeline(self) -> Optional[str]:
+        """
+        Constructs optimized GStreamer pipelines for NVIDIA Jetson hardware acceleration.
+        Returns None if using standard OpenCV capture fallback.
+        """
+        if self.is_file:
+            # Jetson hardware video file decoding pipeline
+            return (
+                f"filesrc location={self.source} ! "
+                f"qtdemux ! h264parse ! nvv4l2decoder ! "
+                f"nvvidconv ! video/x-raw, width={self.width}, height={self.height}, format=BGRx ! "
+                f"videoconvert ! video/x-raw, format=BGR ! "
+                f"appsink drop=true sync=false"
+            )
+        elif self.is_rtsp:
+            # Low-latency RTSP pipeline
+            return (
+                f"rtspsrc location={self.source} latency=100 ! "
+                f"rtph264depay ! h264parse ! nvv4l2decoder ! "
+                f"nvvidconv ! video/x-raw, width={self.width}, height={self.height}, format=BGRx ! "
+                f"videoconvert ! video/x-raw, format=BGR ! "
+                f"appsink drop=true sync=false"
+            )
+        else:
+            # V4L2 USB camera pipeline
+            dev = f"/dev/video{self.source}" if isinstance(self.source, int) else self.source
+            return (
+                f"v4l2src device={dev} ! "
+                f"video/x-raw, width={self.width}, height={self.height}, framerate={self.fps}/1 ! "
+                f"videoconvert ! video/x-raw, format=BGR ! "
+                f"appsink drop=true sync=false"
+            )
+
+    def _init_capture(self) -> None:
+        """Attempts to open capture using GStreamer, falling back to standard OpenCV."""
+        gst_pipeline = self._build_gstreamer_pipeline()
+
+        # Try GStreamer hardware acceleration first
+        if gst_pipeline:
+            self.cap = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+            if self.cap.isOpened():
+                self._is_opened = True
+                print(f"[{self.name}] Opened GStreamer hardware pipeline successfully.")
+                return
+            else:
+                if self.cap:
+                    self.cap.release()
+                print(f"[{self.name}] GStreamer pipeline unavailable. Falling back to standard backend...")
+
+        # Fallback to standard OpenCV capture
+        src_val = int(self.source) if str(self.source).isdigit() else self.source
+        self.cap = cv2.VideoCapture(src_val)
+        if not self.is_file and not self.is_rtsp:
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+            self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        self._is_opened = self.cap.isOpened()
+        if self._is_opened:
+            print(f"[{self.name}] Opened standard capture device: {self.source}")
+        else:
+            print(f"[{self.name}] WARNING: Failed to open capture source: {self.source}")
+
+    def start(self) -> FrameGrabber:
+        """Starts the background acquisition thread."""
+        if self._running:
+            return self
+
+        self._running = True
+        self._thread = threading.Thread(target=self._capture_worker, daemon=True, name=f"Grabber-{self.name}")
+        self._thread.start()
+        return self
+
+    def _capture_worker(self) -> None:
+        """Continuously pulls frames from the device into the latest frame buffer."""
+        while self._running:
+            if self.cap is None or not self.cap.isOpened():
+                time.sleep(0.1)
+                continue
+
+            ret, frame = self.cap.read()
+            now = time.time()
+
+            if not ret or frame is None:
+                if self.is_file and self.auto_loop:
+                    # Auto-loop video file for continuous testing
+                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    time.sleep(0.01)
+                    continue
+                else:
+                    # Temporary read glitch or stream disconnect
+                    time.sleep(0.02)
+                    continue
+
+            with self._lock:
+                self._latest_frame = frame
+                self._latest_timestamp = now
+                self._frame_count += 1
+
+            # Prevent 100% CPU spinning on fast disk reads
+            if self.is_file:
+                time.sleep(1.0 / (self.fps * 1.5))
+
+    def read(self) -> Tuple[bool, Optional[np.ndarray], float]:
+        """
+        Retrieves the latest ingested frame without blocking.
+
+        Returns:
+            Tuple of (success: bool, frame: Optional[np.ndarray], timestamp: float)
+        """
+        with self._lock:
+            if self._latest_frame is None:
+                return False, None, 0.0
+            return True, self._latest_frame.copy(), self._latest_timestamp
+
+    def is_opened(self) -> bool:
+        """Returns whether the capture stream is open and functional."""
+        return self._is_opened
+
+    def stop(self) -> None:
+        """Stops the grabber thread and releases hardware resources."""
+        self._running = False
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+        self._is_opened = False
+        print(f"[{self.name}] Capture pipeline released.")
+
+
+if __name__ == "__main__":
+    # Test synthetic or fallback grabber
+    grabber = FrameGrabber(source=0, name="TestCam")
+    print(f"Grabber opened: {grabber.is_opened()}")
+    grabber.stop()

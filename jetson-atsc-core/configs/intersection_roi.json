@@ -1,0 +1,81 @@
+{
+  "system": {
+    "mode": "DUAL_CAM",
+    "auto_thermal_fallback": true,
+    "thermal_threshold_celsius": 75.0,
+    "min_fps_threshold": 15.0,
+    "thermal_recovery_celsius": 68.0,
+    "recovery_fps_threshold": 20.0
+  },
+  "cameras": {
+    "kamera_sistem": {
+      "source": "/dev/video0",
+      "resolution": [1920, 1080],
+      "fps": 30,
+      "description": "Upstream approach monitor (12-15m oblique flank vantage)"
+    },
+    "kamera_akuisisi": {
+      "source": "/dev/video1",
+      "resolution": [1920, 1080],
+      "fps": 30,
+      "description": "Stop-line discharge auditor & ground-truth recorder"
+    }
+  },
+  "homography": {
+    "description": "Sidewalk-curb 4-point perspective projection to physical metric ground plane",
+    "src_points_pixel": [
+      [520.0, 480.0],
+      [1400.0, 480.0],
+      [1850.0, 1040.0],
+      [70.0, 1040.0]
+    ],
+    "ground_dimensions_m": {
+      "width": 10.5,
+      "length": 45.0
+    },
+    "dst_points_ground": [
+      [0.0, 45.0],
+      [10.5, 45.0],
+      [10.5, 0.0],
+      [0.0, 0.0]
+    ]
+  },
+  "traffic_light_monitor": {
+    "description": "Optical Yellow Phase Visual Trigger with temporal debounce and cooldown lockout",
+    "lamp_roi_pixel": {
+      "ymin": 120,
+      "xmin": 1500,
+      "ymax": 240,
+      "xmax": 1620
+    },
+    "hsv_thresholds": {
+      "hue_min": 18,
+      "hue_max": 35,
+      "sat_min": 120,
+      "sat_max": 255,
+      "val_min": 150,
+      "val_max": 255
+    },
+    "active_ratio_threshold": 0.25,
+    "debounce_frame_count": 3,
+    "cooldown_seconds": 15.0
+  },
+  "lane_metrics": {
+    "physical_road_area_m2": 472.5,
+    "stopped_speed_threshold_mps": 1.0,
+    "green_time_bounds_sec": [10.0, 120.0],
+    "pcu_weights": {
+      "motorcycle": 0.4,
+      "car": 1.0,
+      "truck": 1.6,
+      "bus": 1.6
+    },
+    "vehicle_footprints_m2": {
+      "motorcycle": 2.0,
+      "car": 8.0,
+      "truck": 24.0,
+      "bus": 24.0
+    },
+    "stop_line_tripwire_y_pixel": 980
+  }
+}
