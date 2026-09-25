@@ -229,7 +229,17 @@ class EdgeDaemon:
 
     def _run_loop(self) -> None:
         """Main real-time edge control loop."""
+        t_daemon_start = time.time()
         while self.is_running:
+            if getattr(self.args, "max_cycles", None) and self.cycle_count >= self.args.max_cycles:
+                print(f"\n[EdgeDaemon] Reached target cycle count ({self.args.max_cycles}). Initiating graceful shutdown...")
+                self.is_running = False
+                break
+            if getattr(self.args, "duration", None) and (time.time() - t_daemon_start) >= self.args.duration:
+                print(f"\n[EdgeDaemon] Reached target runtime duration ({self.args.duration}s). Initiating graceful shutdown...")
+                self.is_running = False
+                break
+
             t_loop_start = time.perf_counter()
 
             # 1. Grab Frame 1 (Kamera Sistem)
@@ -281,7 +291,10 @@ class EdgeDaemon:
                 self._handle_yellow_actuation(fps)
 
             # 10. Ground-Truth Recording Enqueue via RecorderSink
-            if self.acq_enabled and ret2 and raw_acq is not None:
+            if getattr(self.args, "record_annotated", False):
+                annotated_frame = self.render_overlay(rectified_sys, vehs_sys)
+                self.recorder_sink.enqueue_frame(annotated_frame)
+            elif self.acq_enabled and ret2 and raw_acq is not None:
                 watermark = f"ACQ | CYC:{self.cycle_count} | SERVED:{self.metrics_extractor.n_served} | {datetime.now().strftime('%H:%M:%S')}"
                 self.recorder_sink.enqueue_frame(raw_acq, watermark)
             else:
@@ -370,8 +383,8 @@ class EdgeDaemon:
             except Exception as e:
                 print(f"[EdgeDaemon] Error in sink {sink.__class__.__name__}: {e}")
 
-    def _render_gui(self, frame: np.ndarray, vehicles: List[TrackedVehicle]) -> None:
-        """Renders live perception overlays and HUD."""
+    def render_overlay(self, frame: np.ndarray, vehicles: List[TrackedVehicle]) -> np.ndarray:
+        """Renders perception overlays, corridor boundaries, and HUD."""
         display_frame = frame.copy()
 
         # Draw corridor IPM boundary
@@ -395,6 +408,11 @@ class EdgeDaemon:
         hw = self.telemetry.read_metrics()
         telemetry_str = f"MODE: {self.mode} | FPS: {hw['fps']:.1f} | TEMP: {hw['soc_temp_c']:.1f}C"
         cv2.putText(display_frame, telemetry_str, (display_frame.shape[1] - 420, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+        return display_frame
+
+    def _render_gui(self, frame: np.ndarray, vehicles: List[TrackedVehicle]) -> None:
+        """Renders live perception overlays and HUD."""
+        display_frame = self.render_overlay(frame, vehicles)
 
         # Show window
         cv2.imshow("ATSC Edge Perception - NVIDIA Jetson Orin Nano", cv2.resize(display_frame, (1280, 720)))
@@ -431,6 +449,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--ledger", type=str, default=os.path.join(CORE_ROOT, "field_experiment_ledger.csv"), help="Path to experiment CSV ledger")
     parser.add_argument("--imgsz", type=int, default=640, help="YOLO inference resolution")
     parser.add_argument("--headless", action="store_true", help="Run without graphical display window")
+    parser.add_argument("--record_annotated", action="store_true", help="Record HUD-annotated video frames instead of raw stream")
+    parser.add_argument("--max_cycles", type=int, default=None, help="Stop daemon gracefully after N completed cycles")
+    parser.add_argument("--duration", type=float, default=None, help="Stop daemon gracefully after N seconds")
     parser.add_argument("--loop", action="store_true", default=True, help="Auto-loop MP4 video sources")
     parser.add_argument("--mock_hardware", action="store_true", default=True, help="Operate serial signal interface in loopback mock mode")
     return parser.parse_args()

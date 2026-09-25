@@ -1,1 +1,2 @@
 cycle_id,timestamp,mode,v_w_pcu,q_meters,l_occupancy_pct,t_anfis_sec,n_served_actual,theoretical_capacity_pcu,fps,soc_temp_c,watchdog_status,llm_anomaly_flag,llm_severity,llm_critique
+1,2026-09-20T07:17:11.428587+00:00,DUAL_CAM,2.0,0.0,3.39,10.0,0,5.0,30.88,16.8,OK,False,NORMAL,Low demand (V_w=2 PCU; Q=0m) with minimum green (10s) is appropriate; zero discharges expected due to no queued vehicles. Thermal and FPS are nominal.

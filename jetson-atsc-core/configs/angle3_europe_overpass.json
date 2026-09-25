@@ -1,0 +1,83 @@
+{
+  "system": {
+    "mode": "SINGLE_CAM",
+    "description": "Angle 3: Elevated Footbridge / Overpass View"
+  },
+  "homography": {
+    "description": "Footbridge overhead perspective projection to metric ground plane",
+    "src_points_pixel": [
+      [
+        540.0,
+        100.0
+      ],
+      [
+        800.0,
+        100.0
+      ],
+      [
+        1180.0,
+        1050.0
+      ],
+      [
+        320.0,
+        1050.0
+      ]
+    ],
+    "ground_dimensions_m": {
+      "width": 10.5,
+      "length": 60.0
+    },
+    "dst_points_ground": [
+      [
+        0.0,
+        60.0
+      ],
+      [
+        10.5,
+        60.0
+      ],
+      [
+        10.5,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ]
+  },
+  "traffic_light_monitor": {
+    "description": "Optical Phase Monitor (Fallback periodic interval)",
+    "lamp_roi_pixel": {
+      "ymin": 10,
+      "xmin": 10,
+      "ymax": 30,
+      "xmax": 30
+    },
+    "hsv_thresholds": {
+      "hue_min": 18,
+      "hue_max": 35,
+      "sat_min": 120,
+      "sat_max": 255,
+      "val_min": 150,
+      "val_max": 255
+    },
+    "active_ratio_threshold": 0.99,
+    "debounce_frame_count": 3,
+    "cooldown_seconds": 15.0
+  },
+  "lane_metrics": {
+    "physical_road_area_m2": 630.0,
+    "stopped_speed_threshold_mps": 1.0,
+    "green_time_bounds_sec": [
+      10.0,
+      120.0
+    ],
+    "pcu_weights": {
+      "motorcycle": 0.4,
+      "car": 1.0,
+      "truck": 1.6,
+      "bus": 1.6
+    }
+  }
+}

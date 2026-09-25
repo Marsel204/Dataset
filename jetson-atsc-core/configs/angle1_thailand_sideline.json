@@ -1,0 +1,83 @@
+{
+  "system": {
+    "mode": "SINGLE_CAM",
+    "description": "Angle 1: Roadside Sideline / Oblique Curb View"
+  },
+  "homography": {
+    "description": "Sidewalk-curb perspective projection to metric ground plane (Sideline Angle)",
+    "src_points_pixel": [
+      [
+        1180.0,
+        295.0
+      ],
+      [
+        1910.0,
+        310.0
+      ],
+      [
+        1850.0,
+        920.0
+      ],
+      [
+        60.0,
+        880.0
+      ]
+    ],
+    "ground_dimensions_m": {
+      "width": 11.0,
+      "length": 45.0
+    },
+    "dst_points_ground": [
+      [
+        0.0,
+        45.0
+      ],
+      [
+        11.0,
+        45.0
+      ],
+      [
+        11.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ]
+  },
+  "traffic_light_monitor": {
+    "description": "Optical Phase Monitor (Fallback to periodic interval for sideline)",
+    "lamp_roi_pixel": {
+      "ymin": 10,
+      "xmin": 10,
+      "ymax": 30,
+      "xmax": 30
+    },
+    "hsv_thresholds": {
+      "hue_min": 18,
+      "hue_max": 35,
+      "sat_min": 120,
+      "sat_max": 255,
+      "val_min": 150,
+      "val_max": 255
+    },
+    "active_ratio_threshold": 0.99,
+    "debounce_frame_count": 3,
+    "cooldown_seconds": 15.0
+  },
+  "lane_metrics": {
+    "physical_road_area_m2": 495.0,
+    "stopped_speed_threshold_mps": 1.0,
+    "green_time_bounds_sec": [
+      10.0,
+      120.0
+    ],
+    "pcu_weights": {
+      "motorcycle": 0.4,
+      "car": 1.0,
+      "truck": 1.6,
+      "bus": 1.6
+    }
+  }
+}

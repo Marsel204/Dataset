@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 recordings/*.mp4
 *.log
+.venv/
+data/

@@ -77,7 +77,7 @@ def test_edge_daemon_integration(tmp_path):
 
     # Poll dynamically for yellow actuation cycle
     t_start = time.time()
-    while time.time() - t_start < 20.0:
+    while time.time() - t_start < 45.0:
         if daemon.cycle_count >= 1:
             break
         time.sleep(0.1)

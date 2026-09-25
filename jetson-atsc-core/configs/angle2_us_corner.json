@@ -1,0 +1,83 @@
+{
+  "system": {
+    "mode": "SINGLE_CAM",
+    "description": "Angle 2: Corner Intersection / Signal Post View"
+  },
+  "homography": {
+    "description": "Corner vantage perspective projection to metric ground plane",
+    "src_points_pixel": [
+      [
+        1035.0,
+        75.0
+      ],
+      [
+        1255.0,
+        75.0
+      ],
+      [
+        1315.0,
+        340.0
+      ],
+      [
+        930.0,
+        310.0
+      ]
+    ],
+    "ground_dimensions_m": {
+      "width": 7.5,
+      "length": 35.0
+    },
+    "dst_points_ground": [
+      [
+        0.0,
+        35.0
+      ],
+      [
+        7.5,
+        35.0
+      ],
+      [
+        7.5,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ]
+  },
+  "traffic_light_monitor": {
+    "description": "Optical Phase Monitor on Right Signal Head",
+    "lamp_roi_pixel": {
+      "ymin": 420,
+      "xmin": 1440,
+      "ymax": 510,
+      "xmax": 1480
+    },
+    "hsv_thresholds": {
+      "hue_min": 18,
+      "hue_max": 35,
+      "sat_min": 120,
+      "sat_max": 255,
+      "val_min": 150,
+      "val_max": 255
+    },
+    "active_ratio_threshold": 0.2,
+    "debounce_frame_count": 3,
+    "cooldown_seconds": 12.0
+  },
+  "lane_metrics": {
+    "physical_road_area_m2": 262.5,
+    "stopped_speed_threshold_mps": 1.0,
+    "green_time_bounds_sec": [
+      10.0,
+      120.0
+    ],
+    "pcu_weights": {
+      "motorcycle": 0.4,
+      "car": 1.0,
+      "truck": 1.6,
+      "bus": 1.6
+    }
+  }
+}

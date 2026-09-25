@@ -57,14 +57,19 @@ class ReplayDebugger:
         step_mode: bool = True,
         max_frames: Optional[int] = None,
         trace_path: Optional[str] = None,
+        export_video: Optional[str] = None,
         imgsz: int = 640,
+        trigger_interval_sec: float = 0.0,
     ) -> None:
         self.video_path = os.path.abspath(video_path)
         self.headless = headless
         self.step_mode = step_mode
         self.max_frames = max_frames
         self.trace_path = os.path.abspath(trace_path) if trace_path else None
+        self.export_video_path = os.path.abspath(export_video) if export_video else None
         self.imgsz = imgsz
+        self.trigger_interval_sec = trigger_interval_sec
+        self.last_trigger_timestamp: float = 0.0
 
         if not os.path.exists(self.video_path):
             raise FileNotFoundError(f"Video file not found: {self.video_path}")
@@ -112,10 +117,19 @@ class ReplayDebugger:
         self.current_snapshot: Optional[TrafficSnapshot] = None
         self.current_vehicles: List[TrackedVehicle] = []
         self.trace_file = None
+        self.video_writer = None
 
         if self.trace_path:
             os.makedirs(os.path.dirname(self.trace_path), exist_ok=True)
             self.trace_file = open(self.trace_path, "w", encoding="utf-8")
+
+        if self.export_video_path:
+            os.makedirs(os.path.dirname(self.export_video_path), exist_ok=True)
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
+            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1080
+            self.video_writer = cv2.VideoWriter(self.export_video_path, fourcc, self.fps, (width, height))
+            print(f"[ReplayDebugger] Exporting annotated video to: {self.export_video_path}")
 
     def run(self) -> None:
         """Executes the replay loop."""
@@ -159,11 +173,18 @@ class ReplayDebugger:
             raw_metrics = self.metrics_extractor.extract_approach_metrics(vehicles)
             self.current_snapshot = TrafficSnapshot.from_dict(raw_metrics, timestamp=timestamp)
 
-            # 5. ANFIS Green Time on Yellow Trigger
-            if yellow_triggered:
+            # 5. ANFIS Green Time on Yellow or Periodic Trigger
+            cycle_triggered = yellow_triggered
+            if not cycle_triggered and self.trigger_interval_sec > 0:
+                if (timestamp - self.last_trigger_timestamp) >= self.trigger_interval_sec and timestamp >= self.trigger_interval_sec:
+                    cycle_triggered = True
+                    self.last_trigger_timestamp = timestamp
+
+            if cycle_triggered:
                 self.cycle_count += 1
                 self.last_decision = self.decision_engine.evaluate(self.current_snapshot, self.cycle_count)
-                print(f"\n⚡ [CYCLE #{self.cycle_count} TRIGGERED at Frame {self.frame_idx} | t={timestamp:.2f}s]")
+                trigger_type = "OPTICAL YELLOW" if yellow_triggered else f"PERIODIC INTERVAL ({self.trigger_interval_sec}s)"
+                print(f"\n⚡ [CYCLE #{self.cycle_count} TRIGGERED ({trigger_type}) at Frame {self.frame_idx} | t={timestamp:.2f}s]")
                 print(f"   V_w={self.current_snapshot.v_w_pcu:.2f} PCU | Q={self.current_snapshot.queue_meters:.1f}m | L={self.current_snapshot.occupancy_pct:.1f}%")
                 print(f"   -> Allocated Green: {self.last_decision.green_seconds:.1f}s (Latency: {self.last_decision.inference_latency_ms:.2f}ms)\n")
 
@@ -196,8 +217,14 @@ class ReplayDebugger:
                 self.trace_file.write(json.dumps(record) + "\n")
 
             # 7. Rendering & User Interaction
-            if not self.headless:
+            display = None
+            if not self.headless or self.video_writer:
                 display = self._render(rectified, vehicles)
+
+            if self.video_writer and display is not None:
+                self.video_writer.write(display)
+
+            if not self.headless and display is not None:
                 cv2.imshow("ATSC Replay Debugger", display)
 
                 wait_time = 0 if self.step_mode else max(1, int(1000.0 / self.fps))
@@ -290,6 +317,8 @@ class ReplayDebugger:
     def _cleanup(self) -> None:
         """Releases video and output file handles."""
         self.cap.release()
+        if self.video_writer:
+            self.video_writer.release()
         if self.trace_file:
             self.trace_file.close()
         if not self.headless:
@@ -308,7 +337,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--step", action="store_true", default=False, help="Start in paused step-by-step mode")
     parser.add_argument("--max_frames", type=int, default=None, help="Stop after processing N frames")
     parser.add_argument("--export_trace", type=str, default=None, help="Path to save frame-by-frame JSONL trace")
+    parser.add_argument("--export_video", type=str, default=None, help="Path to save annotated MP4 video with HUD")
     parser.add_argument("--imgsz", type=int, default=640, help="YOLO inference resolution")
+    parser.add_argument("--trigger_interval_sec", type=float, default=0.0, help="Fallback periodic trigger interval in seconds for scenes without visible traffic light")
     return parser.parse_args()
 
 
@@ -324,7 +355,9 @@ def main() -> None:
         step_mode=args.step,
         max_frames=args.max_frames,
         trace_path=args.export_trace,
+        export_video=args.export_video,
         imgsz=args.imgsz,
+        trigger_interval_sec=args.trigger_interval_sec,
     )
     debugger.run()
 
