@@ -3,6 +3,13 @@ Unit tests for domain types and dataclasses in src/common/types.py.
 """
 
 import json
+import os
+import sys
+
+CORE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if CORE_ROOT not in sys.path:
+    sys.path.insert(0, CORE_ROOT)
+
 from src.common.types import (
     TrafficSnapshot,
     ActuationDecision,

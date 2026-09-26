@@ -5,6 +5,11 @@ Unit tests for pluggable CycleSink implementations in src/sinks/.
 import csv
 import os
 import sys
+
+CORE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if CORE_ROOT not in sys.path:
+    sys.path.insert(0, CORE_ROOT)
+
 from src.common.types import (
     TrafficSnapshot,
     ActuationDecision,

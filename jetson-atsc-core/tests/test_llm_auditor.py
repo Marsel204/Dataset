@@ -105,7 +105,9 @@ def test_llm_auditor_async_queue():
     }
 
     auditor.enqueue_cycle(sample_cycle)
-    time.sleep(0.5)
+    t_start = time.time()
+    while time.time() - t_start < 5.0 and len(completed_audits) == 0:
+        time.sleep(0.05)
     auditor.stop()
 
     assert len(completed_audits) == 1

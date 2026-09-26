@@ -49,7 +49,7 @@
 | M1 | Multi-Condition Dataset Acquisition & Transcoding | Download & standardize Night, Rain, Congestion videos in `data/sample_videos/stress_test/`; transcode Bandung AV1 to H.264; verify Bekasi VP9 | None | DONE (All 5 streams verified 1080p H.264, 19/19 tests pass) |
 | M2 | Camera Calibration & IPM Profile Generation | Generate calibration JSONs for all 5 scenarios with physical validation & PKJI 2014 PCE | M1 | DONE (All 5 profiles + 2 aliases physically validated, 56 new tests pass, 75/75 total tests pass) |
 | M3 | Pipeline Enhancements & Stress Replay Execution | Fix `replay_debug.py` telemetry bug, add false queue filter, execute replay benchmarks, export `.jsonl` traces | M2 | DONE (All 5 benchmarks executed across 4,357 frames, 0 exceptions, 5 .jsonl traces, 98/98 tests pass) |
-| M4 | ANFIS Validation, Side-by-Side Media & Walkthrough | Validate ANFIS actuation, generate H.264 side-by-side MP4s & snapshots, verify 19 tests, compile `walkthrough.md` | M3 | IN_PROGRESS (Worker 4 Gen2: d6010b91-c5aa-4735-8e3a-783867da6984) |
+| M4 | ANFIS Validation, Side-by-Side Media & Walkthrough | Validate ANFIS actuation, generate H.264 side-by-side MP4s & snapshots, verify 19 tests, compile `walkthrough.md` | M3 | DONE (Side-by-side H.264 videos & snapshots generated, walkthrough.md compiled, 119/119 tests pass) |
 
 ## Interface Contracts
 ### Video Input ↔ Replay Pipeline
