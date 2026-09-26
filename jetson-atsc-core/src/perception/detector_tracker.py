@@ -37,6 +37,7 @@ class TrackedVehicle:
         bbox: List[float],
         confidence: float,
         timestamp: float,
+        obs_count: int = 5,
     ) -> None:
         self.track_id = track_id
         self.class_id = class_id
@@ -44,6 +45,7 @@ class TrackedVehicle:
         self.bbox = [float(b) for b in bbox]  # [x1, y1, x2, y2]
         self.confidence = float(confidence)
         self.timestamp = timestamp
+        self.obs_count = obs_count
 
         # Contact point: center of bottom edge
         self.bottom_center = (
@@ -57,8 +59,8 @@ class TrackedVehicle:
 
     @property
     def is_stopped(self) -> bool:
-        """Determines if vehicle is queued / stationary (speed <= 1.0 m/s)."""
-        return self.velocity_mps <= 1.0
+        """Determines if vehicle is queued / stationary (speed <= 1.0 m/s and persistent >= 5 frames)."""
+        return getattr(self, "obs_count", 5) >= 5 and self.velocity_mps <= 1.0
 
 
 class DetectorTracker:
@@ -93,7 +95,10 @@ class DetectorTracker:
 
         # Track history for velocity calculation: {track_id: list of (timestamp, ground_x, ground_y)}
         self.track_trajectories: Dict[int, List[Tuple[float, float, float]]] = {}
+        self.track_obs_counts: Dict[int, int] = {}
         self.max_history_len = 10
+        self.min_stopped_observations = 5
+        self.last_seen_timestamp: float = 0.0
 
         self._load_model()
 
@@ -176,13 +181,16 @@ class DetectorTracker:
                 for i in range(len(boxes)):
                     c_id = int(cls_arr[i])
                     c_name = CLASS_NAMES.get(c_id, f"class_{c_id}")
+                    tid = int(id_arr[i])
+                    current_obs = self.track_obs_counts.get(tid, 0)
                     v = TrackedVehicle(
-                        track_id=int(id_arr[i]),
+                        track_id=tid,
                         class_id=c_id,
                         class_name=c_name,
                         bbox=xyxy_arr[i].tolist(),
                         confidence=float(conf_arr[i]),
                         timestamp=timestamp,
+                        obs_count=current_obs,
                     )
                     frame_vehicles.append(v)
 
@@ -194,6 +202,7 @@ class DetectorTracker:
         self,
         vehicles: List[TrackedVehicle],
         homography_func,
+        timestamp: Optional[float] = None,
     ) -> None:
         """
         Projects vehicles to the ground plane and updates their estimated ground velocity.
@@ -201,8 +210,18 @@ class DetectorTracker:
         Args:
             vehicles: List of TrackedVehicle objects from the approach camera.
             homography_func: Callable (u, v) -> (X_m, Y_m).
+            timestamp: Optional reference timestamp (video replay time or epoch).
         """
-        now = time.time()
+        if timestamp is not None:
+            ref_time = timestamp
+        elif vehicles:
+            ref_time = max(v.timestamp for v in vehicles)
+        elif self.last_seen_timestamp > 0.0:
+            ref_time = self.last_seen_timestamp
+        else:
+            ref_time = time.time()
+        self.last_seen_timestamp = ref_time
+
         active_ids = set()
 
         for v in vehicles:
@@ -219,6 +238,10 @@ class DetectorTracker:
             if len(traj) > self.max_history_len:
                 traj.pop(0)
 
+            # Accumulate temporal persistence observations
+            self.track_obs_counts[v.track_id] = self.track_obs_counts.get(v.track_id, 0) + 1
+            v.obs_count = self.track_obs_counts[v.track_id]
+
             # Calculate speed over the last 3-5 frames (>= 0.1s delta)
             if len(traj) >= 3:
                 t_old, x_old, y_old = traj[0]
@@ -233,8 +256,9 @@ class DetectorTracker:
             else:
                 v.velocity_mps = 0.0
 
-        # Prune stale trajectories older than 5 seconds
+        # Prune stale trajectories older than 5.0 seconds using replay/wall reference time
         for tid in list(self.track_trajectories.keys()):
             if tid not in active_ids:
-                if self.track_trajectories[tid] and (now - self.track_trajectories[tid][-1][0] > 5.0):
+                if self.track_trajectories[tid] and (ref_time - self.track_trajectories[tid][-1][0] > 5.0):
                     del self.track_trajectories[tid]
+                    self.track_obs_counts.pop(tid, None)

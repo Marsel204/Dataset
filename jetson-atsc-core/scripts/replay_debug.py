@@ -78,6 +78,21 @@ class ReplayDebugger:
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = json.load(f)
 
+        sys_cfg = self.config.get("system", {})
+        if "calibration_path" in sys_cfg:
+            cfg_calib = sys_cfg["calibration_path"]
+            if not os.path.isabs(cfg_calib):
+                cfg_calib = os.path.join(CORE_ROOT, cfg_calib)
+            if os.path.exists(cfg_calib) and calib_path.endswith("brica_fisheye_calib.npz"):
+                calib_path = cfg_calib
+
+        if "model_path" in sys_cfg:
+            cfg_model = sys_cfg["model_path"]
+            if not os.path.isabs(cfg_model):
+                cfg_model = os.path.join(CORE_ROOT, cfg_model)
+            if os.path.exists(cfg_model) and model_path.endswith("Final.pt"):
+                model_path = cfg_model
+
         # Initialize core components
         print(f"[ReplayDebugger] Loading Lens Rectifier from: {calib_path}")
         self.rectifier = LensRectifier(calib_path)
@@ -156,6 +171,7 @@ class ReplayDebugger:
 
             self.frame_idx += 1
             timestamp = self.frame_idx / self.fps
+            t_frame_start = time.perf_counter()
 
             # 1. Optics Rectification
             rectified = self.rectifier.rectify(raw_frame)
@@ -166,7 +182,7 @@ class ReplayDebugger:
             # 3. Detection & Tracking
             tracks = self.detector.track([rectified], timestamp=timestamp)
             vehicles = tracks[0] if tracks else []
-            self.detector.update_velocities(vehicles, self.homography.pixel_to_ground)
+            self.detector.update_velocities(vehicles, self.homography.pixel_to_ground, timestamp=timestamp)
             self.current_vehicles = vehicles
 
             # 4. PKJI Traffic Metrics
@@ -194,9 +210,21 @@ class ReplayDebugger:
 
             # 6. Optional Trace Logging
             if self.trace_file:
+                t_frame_end = time.perf_counter()
+                processing_time_ms = (t_frame_end - t_frame_start) * 1000.0
+                fps_val = 1000.0 / processing_time_ms if processing_time_ms > 0 else self.fps
+
                 record = {
                     "frame": self.frame_idx,
+                    "frame_idx": self.frame_idx - 1,
                     "timestamp": round(timestamp, 3),
+                    "processing_time_ms": round(processing_time_ms, 2),
+                    "fps": round(fps_val, 1),
+                    "metrics": {
+                        "V_w": self.current_snapshot.v_w_pcu,
+                        "Q": self.current_snapshot.queue_meters,
+                        "L": self.current_snapshot.occupancy_pct,
+                    },
                     "yellow_active": self.phase_monitor.is_yellow_active,
                     "yellow_ratio": round(self.phase_monitor.last_active_ratio, 3),
                     "yellow_triggered": yellow_triggered,
@@ -212,8 +240,16 @@ class ReplayDebugger:
                         for v in vehicles
                     ],
                 }
-                if yellow_triggered and self.last_decision:
-                    record["decision"] = self.last_decision.to_dict()
+                if cycle_triggered and self.last_decision:
+                    dec_dict = self.last_decision.to_dict()
+                    dec_dict["t_anfis"] = self.last_decision.green_seconds
+                    dec_dict["inputs"] = [
+                        self.current_snapshot.v_w_pcu,
+                        self.current_snapshot.queue_meters,
+                        self.current_snapshot.occupancy_pct,
+                    ]
+                    dec_dict["timestamp"] = round(timestamp, 3)
+                    record["decision"] = dec_dict
                 self.trace_file.write(json.dumps(record) + "\n")
 
             # 7. Rendering & User Interaction
@@ -336,7 +372,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--headless", action="store_true", help="Run without graphical display")
     parser.add_argument("--step", action="store_true", default=False, help="Start in paused step-by-step mode")
     parser.add_argument("--max_frames", type=int, default=None, help="Stop after processing N frames")
-    parser.add_argument("--export_trace", type=str, default=None, help="Path to save frame-by-frame JSONL trace")
+    parser.add_argument("--export_trace", "--trace_output", dest="export_trace", type=str, default=None, help="Path to save frame-by-frame JSONL trace")
     parser.add_argument("--export_video", type=str, default=None, help="Path to save annotated MP4 video with HUD")
     parser.add_argument("--imgsz", type=int, default=640, help="YOLO inference resolution")
     parser.add_argument("--trigger_interval_sec", type=float, default=0.0, help="Fallback periodic trigger interval in seconds for scenes without visible traffic light")

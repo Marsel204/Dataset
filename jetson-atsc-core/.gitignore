@@ -6,3 +6,5 @@ recordings/*.mp4
 *.log
 .venv/
 data/
+.agents/
+models/yolo11s.pt

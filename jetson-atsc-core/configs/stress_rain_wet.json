@@ -1,0 +1,110 @@
+{
+  "system": {
+    "mode": "SINGLE_CAM",
+    "description": "Stress Test: Adverse Weather Rain & Wet Pavement Reflections",
+    "model_path": "models/yolo11s.pt",
+    "calibration_path": "configs/rectilinear_calib.npz"
+  },
+  "homography": {
+    "description": "Wet urban street perspective projection to metric ground plane",
+    "src_points_pixel": [
+      [
+        1750.0,
+        560.0
+      ],
+      [
+        1850.0,
+        1020.0
+      ],
+      [
+        150.0,
+        1020.0
+      ],
+      [
+        180.0,
+        560.0
+      ]
+    ],
+    "ground_dimensions_m": {
+      "width": 10.5,
+      "length": 50.0
+    },
+    "dst_points_ground": [
+      [
+        0.0,
+        50.0
+      ],
+      [
+        10.5,
+        50.0
+      ],
+      [
+        10.5,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ]
+  },
+  "traffic_light_monitor": {
+    "description": "Optical Phase Monitor (Periodic fallback actuation interval for stress rain feed)",
+    "lamp_roi_pixel": {
+      "ymin": 10,
+      "xmin": 10,
+      "ymax": 30,
+      "xmax": 30
+    },
+    "hsv_thresholds": {
+      "hue_min": 18,
+      "hue_max": 35,
+      "sat_min": 120,
+      "sat_max": 255,
+      "val_min": 150,
+      "val_max": 255
+    },
+    "active_ratio_threshold": 0.99,
+    "debounce_frame_count": 3,
+    "cooldown_seconds": 15.0
+  },
+  "lane_metrics": {
+    "physical_road_area_m2": 525.0,
+    "stopped_speed_threshold_mps": 1.0,
+    "green_time_bounds_sec": [
+      10.0,
+      120.0
+    ],
+    "pcu_weights": {
+      "motorcycle": 0.4,
+      "car": 1.0,
+      "truck": 1.6,
+      "bus": 1.6
+    },
+    "vehicle_footprints_m2": {
+      "motorcycle": 2.0,
+      "car": 8.0,
+      "truck": 24.0,
+      "bus": 24.0
+    },
+    "corridor_polygon": [
+      [
+        1750.0,
+        560.0
+      ],
+      [
+        1850.0,
+        1020.0
+      ],
+      [
+        150.0,
+        1020.0
+      ],
+      [
+        180.0,
+        560.0
+      ]
+    ],
+    "stop_line_tripwire_y_pixel": 980
+  }
+}

@@ -38,11 +38,13 @@ class TrafficMetricsExtractor:
         physical_road_area_m2: float = 472.5,
         stopped_speed_threshold_mps: float = 1.0,
         stop_line_tripwire_y: int = 980,
+        min_stopped_observations: int = 5,
     ) -> None:
         self.homography = homography
         self.physical_road_area = physical_road_area_m2
         self.stopped_speed_threshold = stopped_speed_threshold_mps
         self.stop_line_tripwire_y = stop_line_tripwire_y
+        self.min_stopped_observations = min_stopped_observations
 
         # PKJI 2014 PCU weights
         self.pcu_weights = pcu_weights or {
@@ -80,6 +82,7 @@ class TrafficMetricsExtractor:
             physical_road_area_m2=float(lane_cfg.get("physical_road_area_m2", 472.5)),
             stopped_speed_threshold_mps=float(lane_cfg.get("stopped_speed_threshold_mps", 1.0)),
             stop_line_tripwire_y=int(lane_cfg.get("stop_line_tripwire_y_pixel", 980)),
+            min_stopped_observations=int(lane_cfg.get("min_stopped_observations", 5)),
         )
 
     def extract_approach_metrics(
@@ -120,14 +123,15 @@ class TrafficMetricsExtractor:
             else:
                 n_lv += 1
 
-            # 2. Queue accumulation: Stopped vehicle ground distance
+            # 2. Queue accumulation: Stopped vehicle ground distance with temporal persistence gate
             # Projection: Y_m is longitudinal distance from the stop line [0, 45.0m]
             if v.ground_pos is not None:
                 _, y_m = v.ground_pos
             else:
                 _, y_m = self.homography.pixel_to_ground(u, v_px)
 
-            if v.velocity_mps <= self.stopped_speed_threshold:
+            is_persistent = getattr(v, "obs_count", 5) >= self.min_stopped_observations
+            if is_persistent and v.velocity_mps <= self.stopped_speed_threshold:
                 stopped_distances.append(y_m)
 
         # 3. Queue Length (Q): Max distance of stopped vehicles from stop line
@@ -137,16 +141,16 @@ class TrafficMetricsExtractor:
 
         # 4. Weighted Vehicle Count (V_w): PKJI 2014
         V_w = (
-            n_mc * self.pcu_weights["motorcycle"]
-            + n_lv * self.pcu_weights["car"]
-            + n_hv * self.pcu_weights["truck"]
+            n_mc * self.pcu_weights.get("motorcycle", 0.4)
+            + n_lv * self.pcu_weights.get("car", 1.0)
+            + n_hv * self.pcu_weights.get("truck", 1.6)
         )
 
         # 5. Lane Occupancy Ratio (L): Class footprint substitution over physical area
         occupied_area_m2 = (
-            n_mc * self.footprints["motorcycle"]
-            + n_lv * self.footprints["car"]
-            + n_hv * self.footprints["truck"]
+            n_mc * self.footprints.get("motorcycle", 2.0)
+            + n_lv * self.footprints.get("car", 8.0)
+            + n_hv * self.footprints.get("truck", 24.0)
         )
         if self.physical_road_area > 0:
             L = (occupied_area_m2 / self.physical_road_area) * 100.0
